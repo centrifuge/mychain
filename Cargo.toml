@@ -1,0 +1,41 @@
+cargo-features = ["edition2021"]
+
+[[bin]]
+name = "mychain"
+path = "src/main.rs"
+
+[package]
+name = "mychain"
+version = "0.1.0"
+authors = ["Centrifuge <admin@centrifuge.io>"]
+description = "MyChain cli allowing to take-over live-chains locally."
+build = "build.rs"
+edition = "2018"
+license = "LGPL-3.0"
+default-run = "mychain"
+homepage = "https://centrifuge.io/"
+repository = "https://github.com/centrifuge/mychain"
+
+
+[dependencies]
+# third-party dependencies
+codec = { package = "parity-scale-codec", version = "2.0.0", default-features = false, features = ["derive"] }
+serde = { version = "1.0.102", optional = true }
+
+frame-system = {git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.12" }
+
+[features]
+default = ["std"]
+std = [
+    "frame-system/std"
+]
+
+
+[workspace]
+members = [
+    "chains/kusama",
+    "chains/polkadot",
+    "chains/centrifuge",
+    "chains/altair",
+    "core"
+]

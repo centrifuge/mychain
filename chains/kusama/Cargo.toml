@@ -6,3 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+kusama-runtime = { git = "https://github.com/paritytech/polkadot", default-features = false, branch = "release-v0.9.12"}
+
+# Local dependencies
+mychain-core = { path = "../../core" }
+
+[features]
+default = ["std"]
+std = [
+    "kusama-runtime/std"
+]

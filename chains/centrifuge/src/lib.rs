@@ -10,9 +10,9 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-mod cli;
-mod commands;
+extern crate mychain_core;
 
-fn main() -> cli::CliResult {
-    cli::run()
-}
+use centrifuge_runtime::Block;
+use sc_client_db::{Backend, DatabaseSettings, DatabaseSource};
+use sc_executor::WasmExecutor;
+use sp_core::sr25519::Pair;

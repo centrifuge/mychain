@@ -6,3 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+centrifuge-runtime = { git = "https://github.com/centrifuge/centrifuge-chain", default-features = false, branch = "parachain" }
+sc-client-db = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.12"}
+sp-core = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.12" }
+sc-executor = { git = "https://github.com/paritytech/substrate", default-features = false, branch = "polkadot-v0.9.12" }
+
+# Local dependencies
+mychain-core = { path = "../../core" }
+
+[features]
+default = ["std"]
+std = [
+    "centrifuge-runtime/std",
+    "sp-core/std"
+]

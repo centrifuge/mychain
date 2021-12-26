@@ -10,9 +10,16 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-mod cli;
-mod commands;
+///! The parachain command allows to take-over a relay-chain parachain live-network.
+use structopt::StructOpt;
+use crate::cli::{CommonFlags, CliResult, Error};
 
-fn main() -> cli::CliResult {
-    cli::run()
+#[derive(Debug, StructOpt)]
+pub struct ParachainCmd {}
+
+impl ParachainCmd {
+    pub fn run(&self, common: CommonFlags) -> CliResult {
+
+        Err(Error::NotSupported("Command Parachain"))
+    }
 }

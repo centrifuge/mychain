@@ -1,5 +1,4 @@
 #![feature(associated_type_bounds)]
-
 extern crate sc_client_api;
 extern crate sc_client_db;
 extern crate sc_consensus;
@@ -37,25 +36,22 @@ use sp_core::{
 use sp_runtime::{generic::BlockId, traits::Block as BlockT};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
+pub mod traits;
+
+use traits::AuthorityProvider;
+
 pub type Bytes = Vec<u8>;
 
+#[derive(Clone, Debug)]
 pub struct StoragePair {
 	key: Bytes,
 	value: Bytes,
 }
 
-/*
-
-sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block>
-		+ sp_api::Metadata<Block>
-		+ sp_session::SessionKeys<Block>
-		+ sp_api::ApiExt<
-			Block,
-			StateBackend = sc_client_api::StateBackendFor<TFullBackend<Block>, Block>,
-		> + sp_offchain::OffchainWorkerApi<Block>
-		+ sp_block_builder::BlockBuilder<Block>,
-	sc_client_api::StateBackendFor<TFullBackend<Block>, Block>: sp_api::StateBackend<BlakeTwo256>,
- */
+pub struct TransitionCache<Block: BlockT> {
+	extrinsics: Vec<Block::Extrinsic>,
+	auxilliary: Vec<StoragePair>,
+}
 
 pub struct Builder<Block, RtApi, Exec, B = Backend<Block>, C = TFullClient<Block, RtApi, Exec>>
 where
@@ -63,21 +59,6 @@ where
 	Block: BlockT,
 	RtApi: ConstructRuntimeApi<Block, TFullClient<Block, RtApi, Exec>> + Send,
 	Exec: CodeExecutor + RuntimeVersionOf + Clone + 'static,
-{
-	backend: B,
-	client: C,
-	_phantom_1: PhantomData<Block>,
-	_phantom_2: PhantomData<RtApi>,
-	_phantom_3: PhantomData<Exec>,
-}
-
-impl<Block, RtApi, Exec, B, C> Builder<Block, RtApi, Exec, B, C>
-where
-	B: BackendT<Block>,
-	Block: BlockT,
-	RtApi: ConstructRuntimeApi<Block, TFullClient<Block, RtApi, Exec>> + Send,
-	Exec: CodeExecutor + RuntimeVersionOf + Clone + 'static,
-	//RtApi::RuntimeApi: ApiExt<Block, StateBackend = B::State>,
 	C::Api: BlockBuilder<Block> + ApiExt<Block>,
 	C: 'static
 		+ ProvideRuntimeApi<Block>
@@ -90,41 +71,136 @@ where
 		+ HeaderBackend<Block>
 		+ BlockImport<Block>,
 {
-	pub fn new(backend: Backend<Block>) -> Self {
-		todo!()
+	backend: B,
+	client: C,
+	cache: TransitionCache<Block>,
+	blocks: Vec<BlockImportParams<Block, <C as BlockImport<Block>>::Transaction>>,
+	_phantom_1: PhantomData<Block>,
+	_phantom_2: PhantomData<RtApi>,
+	_phantom_3: PhantomData<Exec>,
+}
+
+impl<Block, RtApi, Exec, B, C> Builder<Block, RtApi, Exec, B, C>
+where
+	B: BackendT<Block>,
+	Block: BlockT,
+	RtApi: ConstructRuntimeApi<Block, TFullClient<Block, RtApi, Exec>> + Send,
+	Exec: CodeExecutor + RuntimeVersionOf + Clone + 'static,
+	C::Api: BlockBuilder<Block> + ApiExt<Block>,
+	C: 'static
+		+ ProvideRuntimeApi<Block>
+		+ BlockOf
+		+ ProvideCache<Block>
+		+ Send
+		+ Sync
+		+ AuxStore
+		+ UsageProvider<Block>
+		+ HeaderBackend<Block>
+		+ BlockImport<Block>,
+{
+	/// Create a new Builder with provided backend and client.
+	pub fn new(backend: B, client: C) -> Self {
+		Builder {
+			backend,
+			client,
+			cache: TransitionCache { extrinsics: Vec::new(), auxilliary: Vec::new() },
+			blocks: Vec::new(),
+			_phantom_1: PhantomData::default(),
+			_phantom_2: PhantomData::default(),
+			_phantom_3: PhantomData::default(),
+		}
 	}
 
+	/// Creates a new Builder instance with `B` and `C` being default values.
+	pub fn new_with_default(db_config: DatabaseSettings) -> Self {
+		todo!();
+	}
+
+	/// Append a given set of key-value-pairs into the builder cache
 	pub fn append_transitions(&mut self, trans: Vec<(Bytes, Bytes)>) -> &mut Self {
-		// TODO: Generate block corre
+		trans.into_iter().for_each(|pair| {
+			self.cache.auxilliary.push(StoragePair { key: pair.0, value: pair.1 })
+		});
 
-		//sc_consensus::BlockImport::import_block(&mut self.client, import, HashMap::new());
-		todo!()
+		self
 	}
 
-	// TODO: Something that takes cached transitions and produces a new "valid" block for a given
-	//       runtime
-	pub fn create_block(&self) -> Block {
+	/// Caches a given extrinsic in the builder. The extrinsic will be
+	pub fn append_extrinsics(&mut self, exts: Vec<Block::Extrinsic>) -> &mut Self {
+		exts.into_iter().for_each(|ext| self.cache.extrinsics.push(ext));
+
+		self
+	}
+
+	/// Store the provided authorites in the Builder cache.
+	pub fn swap_authorities<P: AuthorityProvider>(&mut self) -> &mut Self {
+		self.cache
+			.auxilliary
+			.clone_from_slice(<P as AuthorityProvider>::block_production().as_slice());
+		self.cache
+			.auxilliary
+			.clone_from_slice(<P as AuthorityProvider>::misc().as_slice());
+
+		self
+	}
+
+	/// Create a block from a given state of the Builder. The block will be cached.
+	///
+	/// Multiple calls of this will result in building multiple blocks, where each block
+	/// is the child of the previously build block (or the last block of the fetched state).
+	///
+	/// This does NOT alter the existing underlying database.
+	pub fn build_block(&mut self) -> &mut Self {
 		todo!()
+
+		// TODO: Uses the cached transitions and extrinsics and creates a BlockImportParams struct
 
 		// TODO: Rough overview
-		//   - Create the BlockImportParams struct
-		//   - We need to pass the new changes via `Aux`-field
+		//   - Create the `BlockImportParams` struct E.g
+		//		// NOTE: Is this the correct BlockOrigin? We want it to be stored as "checked"
+		//     let mut import = BlockImportParams::new(BlockOrigin::ConsensusBroadcast, header);
+		//     import.body = Some(self.cache.extrinsics);
+		//     import.aux = self.cache.auxilliary;
+		//     import.finalized = true;
+		//     import.fork_choice = Some(ForkChoiceStrategy::Custom(true));
+		//
+		//      - We need to pass the new changes via `Aux`-field
+		// 	 - Stores struct in builder
+		//   - Cleans up TransitionCache
 	}
 
-	pub fn take_over(&mut self) {
-		let (header, extrinsics) = self.create_block().deconstruct();
-		// TODO: Is this the correct BlockOrigin? We want it to be stored as "checked"
-		let mut import = BlockImportParams::new(BlockOrigin::ConsensusBroadcast, header);
-		import.body = Some(extrinsics);
-		import.finalized = true;
-		import.fork_choice = Some(ForkChoiceStrategy::Custom(true));
+	/// Actually apply all cached blocks to the underlying database.
+	/// This alters the provided database.
+	pub fn take_over(self) {
+		let mut import = self.client;
+		self.blocks.into_iter().for_each(|params| {
+			let res = futures::executor::block_on(import.import_block(params, HashMap::new()));
 
-		self.client.import_block(import, HashMap::new());
+			// TODO: Handle result of failing import?
+		});
 	}
 }
 
-pub fn backend_from_data<Block: BlockT>(path: PathBuf) -> Backend<Block> {
-	todo!();
+/// Creates default DatabaseSettings in the form of
+/// ```
+/// use sc_client_db::*;
+///
+/// DatabaseSettings {
+/// 	state_cache_size: 0,
+/// 	/// Ratio of cache size dedicated to child tries.
+/// 	state_cache_child_ratio: None,
+/// 	/// State pruning mode.
+/// 	state_pruning: PruningMode::ArchiveAll,
+/// 	/// Where to find the database.
+/// 	source: DatabaseSource::RocksDb{path: "path_of_user", cache_size: 0},
+/// 	/// Block pruning mode.
+/// 	keep_blocks: KeepBlocks::All,
+/// 	/// Block body/Transaction storage scheme.
+/// 	transaction_storage: TransactionStorageMode::BlockBody,
+/// }
+/// ```
+pub fn default_database_settings(path: PathBuf) -> DatabaseSettings {
+	todo!()
 }
 
 // TODO: Nice code examples that could help implementing this idea of taking over a chain locally
@@ -353,5 +429,16 @@ pub trait Verifier<B: BlockT>: Send + Sync {
 	let import_block = import_block.clear_storage_changes_and_mutate();
 	let imported = import_handle.import_block(import_block, cache).await;
 
+
+
+sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block>
+		+ sp_api::Metadata<Block>
+		+ sp_session::SessionKeys<Block>
+		+ sp_api::ApiExt<
+			Block,
+			StateBackend = sc_client_api::StateBackendFor<TFullBackend<Block>, Block>,
+		> + sp_offchain::OffchainWorkerApi<Block>
+		+ sp_block_builder::BlockBuilder<Block>,
+	sc_client_api::StateBackendFor<TFullBackend<Block>, Block>: sp_api::StateBackend<BlakeTwo256>,
 
  */

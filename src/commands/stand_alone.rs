@@ -12,7 +12,7 @@
 
 use super::Chain;
 use crate::cli::{CliResult, CommonFlags};
-use mychain_core::{backend_from_data, Builder};
+use mychain_core::{default_database_settings, traits::DefaultAuthorityProvider, Builder};
 use mychain_polkadot::{PolkadotBlock, PolkadotExec, PolkadotRtApi};
 ///! The stand-alone command allows to take-over a stand-alone live system.
 use structopt::StructOpt;
@@ -30,17 +30,18 @@ impl StandAloneCmd {
 
 		match config.chain {
 			Chain::Polkadot => {
-				let builder = Builder::<PolkadotBlock, PolkadotRtApi, PolkadotExec>::new(
-					backend_from_data(common.data),
-				)
-				// TODO: Generate actuall key value pairs to get location of authorities that shall
-				//   be switched
-				.append_transitions(Vec::new())
-				// TODO: Pass additional transitions
-				.append_transitions(Vec::new())
-				// TODO: After this call the provided backend is altered and can be used to start
-				// new nodes
-				.take_over();
+				let mut builder =
+					Builder::<PolkadotBlock, PolkadotRtApi, PolkadotExec>::new_with_default(
+						default_database_settings(common.data),
+					);
+
+				builder
+					.swap_authorities::<DefaultAuthorityProvider>()
+					// TODO: Pass additional transitions from user input here
+					.append_transitions(Vec::new())
+					.build_block();
+
+				builder.take_over();
 			},
 			Chain::Kusama => todo!(),
 			Chain::Centrifuge => todo!(),

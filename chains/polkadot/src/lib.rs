@@ -10,9 +10,10 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-mod cli;
-mod commands;
+pub use polkadot_runtime::Block as PolkadotBlock;
+use sc_client_db::{Backend, DatabaseSettings, DatabaseSource};
+use sc_executor::WasmExecutor;
+use sp_core::sr25519::Pair;
 
-fn main() -> cli::CliResult {
-    cli::run()
-}
+pub use polkadot_runtime::RuntimeApi as PolkadotRtApi;
+pub use sc_executor::WasmExecutor as PolkadotExec;

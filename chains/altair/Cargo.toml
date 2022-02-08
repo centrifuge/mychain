@@ -6,3 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+altair-runtime = { git = "https://github.com/centrifuge/centrifuge-chain", default-features = false, branch = "parachain" }
+
+# Local dependencies
+mychain-core = { path = "../../core" }
+
+[features]
+default = ["std"]
+std = [
+    "altair-runtime/std"
+]

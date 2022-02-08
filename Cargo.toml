@@ -1,5 +1,3 @@
-cargo-features = ["edition2021"]
-
 [[bin]]
 name = "mychain"
 path = "src/main.rs"
